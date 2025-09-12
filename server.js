@@ -47,7 +47,7 @@ const PUPPETEER_NAV_TIMEOUT = 12000; // ms for full page load when needed
 // Store screenshots in legacy-compatible photos directory (fallback for local dev)
 const SCREENSHOT_DIR = path.join(__dirname,'public','photos');
 const SCREENSHOT_PUBLIC_PREFIX = '/photos';
-const BASE_PUBLIC_URL = process.env.BASE_PUBLIC_URL || `http://localhost:${PORT}`;
+const BASE_PUBLIC_URL = process.env.BASE_PUBLIC_URL || `https://backend-q7e0.onrender.com:${PORT}`;
 // Allow public (unauthenticated) URL submission + listing if set to '1'
 const ALLOW_PUBLIC_SUBMISSION = process.env.ALLOW_PUBLIC_SUBMISSION === '1';
 
@@ -1359,7 +1359,7 @@ app.get('/api/stream', (req,res)=>{
 });
 
 // ---------------- Start Server ----------------
-app.listen(PORT, ()=>console.log(`Monitoring server listening on http://localhost:${PORT}`));
+app.listen(PORT, ()=>console.log(`Monitoring server listening on ${PORT}`));
 
 process.on('unhandledRejection', e=>console.error('[UNHANDLED]', e));
 process.on('uncaughtException', e=>console.error('[UNCAUGHT]', e));

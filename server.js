@@ -1045,7 +1045,16 @@ try { cron.schedule(DAILY_CRON, ()=>sendDailySummary().catch(e=>console.error('[
 const app = express();
 app.use(cors({ origin:'https://frontend-nttk.onrender.com', credentials:true }));
 app.use(express.json());
-app.use(session({ secret: SESSION_SECRET, resave:false, saveUninitialized:false, cookie:{ httpOnly:true, sameSite:'lax' }}));
+app.use(session({ 
+  secret: SESSION_SECRET, 
+  resave: false, 
+  saveUninitialized: false, 
+  cookie: { 
+    httpOnly: true, 
+    secure: true,  // Required for HTTPS
+    sameSite: 'none'  // Required for cross-origin cookies
+  }
+}));
 // Serve new photos path + keep backwards compatibility for previously generated /screenshots files if any
 app.use('/photos', express.static(SCREENSHOT_DIR));
 app.use('/screenshots', express.static(SCREENSHOT_DIR));

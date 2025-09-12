@@ -1043,19 +1043,23 @@ try { cron.schedule(DAILY_CRON, ()=>sendDailySummary().catch(e=>console.error('[
 
 // ---------------- Express API + Auth (unchanged auth routes) ----------------
 const app = express();
-app.use(cors({ origin:'https://frontend-nttk.onrender.com', credentials:true }));
+app.use(cors({ 
+  origin: 'https://frontend-nttk.onrender.com', 
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 app.use(session({ 
-  name: 'sessionId',
   secret: SESSION_SECRET, 
   resave: false, 
-  saveUninitialized: false, 
+  saveUninitialized: true,  // Changed to true for cross-origin
   cookie: { 
-    httpOnly: true, 
+    httpOnly: false,  // Changed to false so frontend can access
     secure: true,  // Required for HTTPS
     sameSite: 'none',  // Required for cross-origin cookies
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    domain: undefined  // Let browser handle domain
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
 

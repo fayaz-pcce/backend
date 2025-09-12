@@ -21,7 +21,7 @@ require('dotenv').config();
 // ---------------- Configuration ----------------
 const PORT = process.env.PORT || 3001;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-const SESSION_SECRET = process.env.SESSION_SECRET || 'change_me_dev';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'cec77111247a8425c8bed1673f4d1b510311963e8c2840104f0e57cc0af5bed677dceeb78c28e610c578e7c99e4b9f2468bf4b5fa994ef205c1aa486a754c581';
 // Default scan interval now 60 minutes (override with SCAN_INTERVAL_MS env var)
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || (60*60*1000),10); // 60 minutes default
 const DAILY_CRON = (process.env.DAILY_CRON ? process.env.DAILY_CRON.split('#')[0].trim() : '0 9 * * *');

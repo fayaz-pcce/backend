@@ -1046,15 +1046,25 @@ const app = express();
 app.use(cors({ origin:'https://frontend-nttk.onrender.com', credentials:true }));
 app.use(express.json());
 app.use(session({ 
+  name: 'sessionId',
   secret: SESSION_SECRET, 
   resave: false, 
   saveUninitialized: false, 
   cookie: { 
     httpOnly: true, 
     secure: true,  // Required for HTTPS
-    sameSite: 'none'  // Required for cross-origin cookies
+    sameSite: 'none',  // Required for cross-origin cookies
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    domain: undefined  // Let browser handle domain
   }
 }));
+
+// Debug middleware to log session info
+app.use((req, res, next) => {
+  console.log(`[SESSION] ${req.method} ${req.path} - Session ID: ${req.sessionID}, Admin: ${req.session?.adminEmail || 'none'}`);
+  next();
+});
+
 // Serve new photos path + keep backwards compatibility for previously generated /screenshots files if any
 app.use('/photos', express.static(SCREENSHOT_DIR));
 app.use('/screenshots', express.static(SCREENSHOT_DIR));

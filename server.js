@@ -1043,7 +1043,7 @@ try { cron.schedule(DAILY_CRON, ()=>sendDailySummary().catch(e=>console.error('[
 
 // ---------------- Express API + Auth (unchanged auth routes) ----------------
 const app = express();
-app.use(cors({ origin:'http://localhost:5173', credentials:true }));
+app.use(cors({ origin:'https://frontend-nttk.onrender.com', credentials:true }));
 app.use(express.json());
 app.use(session({ secret: SESSION_SECRET, resave:false, saveUninitialized:false, cookie:{ httpOnly:true, sameSite:'lax' }}));
 // Serve new photos path + keep backwards compatibility for previously generated /screenshots files if any

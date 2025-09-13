@@ -595,6 +595,8 @@ async function captureWithPuppeteer(url, id){
 
 async function takeScreenshot(page, siteId, url){
   try {
+    console.log(`[SHOT] Starting screenshot for ${url}`);
+    
     // URL-based naming: google.com -> google
     const cleanUrl = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
     const filename = `${cleanUrl}.png`;
@@ -604,6 +606,14 @@ async function takeScreenshot(page, siteId, url){
       fullPage: true, 
       type: 'png' 
     });
+    
+    console.log(`[SHOT] Screenshot buffer created for ${url}, size: ${screenshotBuffer.length} bytes`);
+    
+    // Check if Cloudinary credentials are available
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error('[SHOT] Cloudinary credentials not configured');
+      return null;
+    }
     
     // Upload to Cloudinary
     const uploadResult = await new Promise((resolve, reject) => {
@@ -616,8 +626,13 @@ async function takeScreenshot(page, siteId, url){
           format: 'png'
         },
         (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
+          if (error) {
+            console.error('[SHOT] Cloudinary upload error:', error);
+            reject(error);
+          } else {
+            console.log('[SHOT] Cloudinary upload success:', result.secure_url);
+            resolve(result);
+          }
         }
       ).end(screenshotBuffer);
     });
@@ -626,7 +641,7 @@ async function takeScreenshot(page, siteId, url){
     return uploadResult.secure_url; // Return Cloudinary URL
     
   } catch(e){ 
-    console.error('[SHOT] failed', siteId, url, e.message); 
+    console.error('[SHOT] failed', siteId, url, e.message, e.stack); 
     return null; 
   }
 }
@@ -1440,6 +1455,52 @@ app.post('/api/migrate-screenshots', auth, async (req,res)=>{
     res.status(500).json({ 
       message: 'Migration failed', 
       error: e.message 
+    });
+  }
+});
+
+// Test Cloudinary configuration
+app.get('/api/test-cloudinary', auth, async (req, res) => {
+  try {
+    console.log('[CLOUDINARY-TEST] Testing configuration...');
+    
+    // Check if credentials are set
+    const hasCredentials = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+    
+    if (!hasCredentials) {
+      return res.status(500).json({ 
+        message: 'Cloudinary credentials not configured',
+        config: {
+          cloud_name: !!process.env.CLOUDINARY_CLOUD_NAME,
+          api_key: !!process.env.CLOUDINARY_API_KEY,
+          api_secret: !!process.env.CLOUDINARY_API_SECRET
+        }
+      });
+    }
+
+    // Test Cloudinary connection by getting account details
+    const result = await cloudinary.api.ping();
+    console.log('[CLOUDINARY-TEST] Ping result:', result);
+    
+    res.json({ 
+      message: 'Cloudinary configuration is working',
+      status: result.status,
+      config: {
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT_SET',
+        api_secret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT_SET'
+      }
+    });
+  } catch (error) {
+    console.error('[CLOUDINARY-TEST] Error:', error);
+    res.status(500).json({ 
+      message: 'Cloudinary test failed', 
+      error: error.message,
+      config: {
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'NOT_SET',
+        api_key: process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT_SET',
+        api_secret: process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT_SET'
+      }
     });
   }
 });

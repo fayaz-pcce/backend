@@ -441,6 +441,7 @@ function quickHttpProbe(host, useHttps=true){
 }
 
 async function captureWithPuppeteer(url, id){
+  console.log(`[DEBUG] captureWithPuppeteer started for ${url} (id: ${id})`);
   if(cancelRequested){ return { navError: new Error('cancelled'), navTimedOut:false, httpStatus:null, overlayType:null, overlaySnippet:null, screenshotRel:null, additionalAnomalies:null }; }
   // Configurable timeout (default 30s) separate from legacy PUPPETEER_NAV_TIMEOUT
   const navTimeout = parseInt(process.env.PUPPETEER_TIMEOUT || '30000',10);
@@ -716,7 +717,12 @@ async function checkDbRow(row, opts={ clientView:false }){
     else if(probeHttp.error){ probeConnError=true; scheme='http'; }
     else { scheme='http'; httpStatus=probeHttp.status; }
   } else { httpStatus=probeHttps.status; scheme='https'; }
-  const full=await captureWithPuppeteer(`${scheme}://${row.url}`, row.id).catch(()=>null);
+  console.log(`[DEBUG] About to call captureWithPuppeteer for ${row.url} with scheme ${scheme}`);
+  const full=await captureWithPuppeteer(`${scheme}://${row.url}`, row.id).catch((err)=>{
+    console.error(`[DEBUG] captureWithPuppeteer failed for ${row.url}:`, err.message);
+    return null;
+  });
+  console.log(`[DEBUG] captureWithPuppeteer returned for ${row.url}:`, full ? 'success' : 'null');
   if(full){
     httpStatus=full.httpStatus; navError=full.navError; overlayType=full.overlayType; overlaySnippet=full.overlaySnippet;
    if(full.screenshotRel){ 

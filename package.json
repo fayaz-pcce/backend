@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "postinstall": "npx puppeteer browsers install chrome || echo 'Chrome installation failed, will try alternative paths'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

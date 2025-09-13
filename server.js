@@ -323,7 +323,71 @@ async function requestCancelAll(){
 }
 async function getBrowser(){
   if(!browserPromise){
-    browserPromise=puppeteer.launch({ headless:true, ignoreHTTPSErrors:true, args:[ '--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage' ] });
+    console.log('[BROWSER] Launching new browser instance...');
+    
+    // Enhanced browser options for Render
+    const browserOptions = {
+      headless: true,
+      ignoreHTTPSErrors: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
+      ]
+    };
+    
+    // Try to launch with different strategies
+    browserPromise = (async () => {
+      try {
+        // Strategy 1: Default launch
+        console.log('[BROWSER] Attempting default launch...');
+        return await puppeteer.launch(browserOptions);
+      } catch (error1) {
+        console.log(`[BROWSER] Default launch failed: ${error1.message}`);
+        
+        // Strategy 2: Try with executablePath from environment
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+          try {
+            console.log(`[BROWSER] Trying with PUPPETEER_EXECUTABLE_PATH: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
+            return await puppeteer.launch({
+              ...browserOptions,
+              executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
+            });
+          } catch (error2) {
+            console.log(`[BROWSER] PUPPETEER_EXECUTABLE_PATH failed: ${error2.message}`);
+          }
+        }
+        
+        // Strategy 3: Try common Chrome paths on Linux
+        const chromePaths = [
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium'
+        ];
+        
+        for (const chromePath of chromePaths) {
+          try {
+            console.log(`[BROWSER] Trying ${chromePath}...`);
+            return await puppeteer.launch({
+              ...browserOptions,
+              executablePath: chromePath
+            });
+          } catch (error3) {
+            console.log(`[BROWSER] ${chromePath} failed: ${error3.message}`);
+          }
+        }
+        
+        // If all strategies fail, throw the original error
+        throw error1;
+      }
+    })();
   }
   return browserPromise;
 }

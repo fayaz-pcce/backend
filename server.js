@@ -577,23 +577,37 @@ async function captureWithPuppeteer(url, id){
   let screenshotRel=null;
   // Attempt screenshot on success OR soft-timeout if any DOM present (even with overlay)
   console.log(`[SHOT-DEBUG] ${url} - response: ${!!response}, timedOut: ${timedOut}`);
-  if(response || timedOut){
-    try { 
-      const html=await page.content(); 
-      console.log(`[SHOT-DEBUG] ${url} - HTML length: ${html ? html.length : 0}`);
-      if(html && html.length>30){ 
-        console.log(`[SHOT-DEBUG] ${url} - Calling takeScreenshot`);
-        screenshotRel = await takeScreenshot(page, id, url); 
-        console.log(`[SHOT-DEBUG] ${url} - takeScreenshot returned: ${screenshotRel}`);
-      } else {
-        console.log(`[SHOT-DEBUG] ${url} - Skipping screenshot: HTML too short or empty`);
-      }
-    } catch(e) {
-      console.error('[SCREENSHOT] Failed:', e.message);
-    }
-  } else {
-    console.log(`[SHOT-DEBUG] ${url} - Skipping screenshot: No response and no timeout`);
+  
+  // TEMPORARY: Force screenshot attempt for debugging
+  console.log(`[SHOT-DEBUG] ${url} - FORCING screenshot attempt for debugging`);
+  try { 
+    const html=await page.content(); 
+    console.log(`[SHOT-DEBUG] ${url} - HTML length: ${html ? html.length : 0}`);
+    console.log(`[SHOT-DEBUG] ${url} - Calling takeScreenshot (FORCED)`);
+    screenshotRel = await takeScreenshot(page, 999, url); 
+    console.log(`[SHOT-DEBUG] ${url} - takeScreenshot returned: ${screenshotRel}`);
+  } catch(e) {
+    console.error('[SCREENSHOT] FORCED attempt failed:', e.message, e.stack);
   }
+  
+  // Original logic (commented out for debugging)
+  // if(response || timedOut){
+  //   try { 
+  //     const html=await page.content(); 
+  //     console.log(`[SHOT-DEBUG] ${url} - HTML length: ${html ? html.length : 0}`);
+  //     if(html && html.length>30){ 
+  //       console.log(`[SHOT-DEBUG] ${url} - Calling takeScreenshot`);
+  //       screenshotRel = await takeScreenshot(page, id, url); 
+  //       console.log(`[SHOT-DEBUG] ${url} - takeScreenshot returned: ${screenshotRel}`);
+  //     } else {
+  //       console.log(`[SHOT-DEBUG] ${url} - Skipping screenshot: HTML too short or empty`);
+  //     }
+  //   } catch(e) {
+  //     console.error('[SCREENSHOT] Failed:', e.message);
+  //   }
+  // } else {
+  //   console.log(`[SHOT-DEBUG] ${url} - Skipping screenshot: No response and no timeout`);
+  // }
   
   try { await page.close(); } catch{}
   

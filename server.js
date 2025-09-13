@@ -11,7 +11,7 @@ const { v2: cloudinary } = require('cloudinary');
 let externalImporter=null; let externalEmail=null; try { externalImporter=require('./utils/importer'); externalEmail=require('./utils/email'); } catch{}
 const cron = require('node-cron');
 const cors = require('cors');
-const session = require('express-session');
+const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
@@ -21,7 +21,7 @@ require('dotenv').config();
 // ---------------- Configuration ----------------
 const PORT = process.env.PORT || 3001;
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-const SESSION_SECRET = process.env.SESSION_SECRET || 'cec77111247a8425c8bed1673f4d1b510311963e8c2840104f0e57cc0af5bed677dceeb78c28e610c578e7c99e4b9f2468bf4b5fa994ef205c1aa486a754c581';
+const JWT_SECRET = process.env.JWT_SECRET || 'cec77111247a8425c8bed1673f4d1b510311963e8c2840104f0e57cc0af5bed677dceeb78c28e610c578e7c99e4b9f2468bf4b5fa994ef205c1aa486a754c581';
 // Default scan interval now 60 minutes (override with SCAN_INTERVAL_MS env var)
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || (60*60*1000),10); // 60 minutes default
 const DAILY_CRON = (process.env.DAILY_CRON ? process.env.DAILY_CRON.split('#')[0].trim() : '0 9 * * *');
@@ -1041,7 +1041,7 @@ async function sendDailySummary(){
 
 try { cron.schedule(DAILY_CRON, ()=>sendDailySummary().catch(e=>console.error('[DAILY] error', e.message)), { timezone: process.env.SCAN_TZ||'UTC' }); console.log(`[CRON] daily summary scheduled ${DAILY_CRON}`); } catch(e){ console.error('[CRON] schedule failed', e.message); }
 
-// ---------------- Express API + Auth (unchanged auth routes) ----------------
+// ---------------- Express API + Auth (JWT-based) ----------------
 const app = express();
 app.use(cors({ 
   origin: 'https://frontend-nttk.onrender.com', 
@@ -1051,21 +1051,44 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json());
-app.use(session({ 
-  secret: SESSION_SECRET, 
-  resave: false, 
-  saveUninitialized: true,  // Changed to true for cross-origin
-  cookie: { 
-    httpOnly: false,  // Changed to false so frontend can access
-    secure: true,  // Required for HTTPS
-    sameSite: 'none',  // Required for cross-origin cookies
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
 
-// Debug middleware to log session info
+// JWT Helper Functions
+function generateToken(email) {
+  return jwt.sign({ email }, JWT_SECRET, { expiresIn: '24h' });
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+}
+
+// JWT Authentication Middleware
+function auth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+  
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+  
+  req.adminEmail = decoded.email;
+  next();
+}
+
+// Debug middleware to log auth info
 app.use((req, res, next) => {
-  console.log(`[SESSION] ${req.method} ${req.path} - Session ID: ${req.sessionID}, Admin: ${req.session?.adminEmail || 'none'}`);
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  const decoded = token ? verifyToken(token) : null;
+  console.log(`[AUTH] ${req.method} ${req.path} - Token: ${token ? 'present' : 'none'}, Admin: ${decoded?.email || 'none'}`);
   next();
 });
 
@@ -1074,14 +1097,73 @@ app.use('/photos', express.static(SCREENSHOT_DIR));
 app.use('/screenshots', express.static(SCREENSHOT_DIR));
 const upload = multer({ storage: multer.memoryStorage() });
 
-function auth(req,res,next){ if(req.session && req.session.adminEmail) return next(); return res.status(401).json({ message:'Not authenticated' }); }
+// Auth routes (JWT-based)
+app.post('/api/admin/signup', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password required' });
+  }
+  
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const { error } = await supabase.from('admin').insert({ email, password_hash: hash });
+    
+    if (error) {
+      if ((error.message || '').toLowerCase().includes('duplicate')) {
+        return res.status(409).json({ message: 'Email already registered' });
+      }
+      throw error;
+    }
+    
+    const token = generateToken(email);
+    res.json({ email, token });
+  } catch (e) {
+    res.status(500).json({ message: 'Signup failed', error: e.message });
+  }
+});
 
-// Auth routes (kept exactly as original requirement)
-app.post('/api/admin/signup', async (req,res)=>{ const { email,password }=req.body; if(!email||!password) return res.status(400).json({message:'Email and password required'}); try { const hash=await bcrypt.hash(password,10); const { error } = await supabase.from('admin').insert({ email, password_hash:hash }); if (error) { if((error.message||'').toLowerCase().includes('duplicate')) return res.status(409).json({ message:'Email already registered'}); throw error; } req.session.adminEmail=email; res.json({ email }); } catch(e){ res.status(500).json({ message:'Signup failed', error:e.message }); } });
-app.post('/api/admin/login', async (req,res)=>{ const { email,password }=req.body; if(!email||!password) return res.status(400).json({message:'Email and password required'}); try { const { data: row } = await supabase.from('admin').select('*').eq('email',email).single(); if(!row) return res.status(401).json({ message:'Invalid credentials'}); const ok=await bcrypt.compare(password,row.password_hash); if(!ok) return res.status(401).json({ message:'Invalid credentials'}); req.session.adminEmail=email; res.json({ email }); } catch(e){ res.status(500).json({ message:'Login failed', error:e.message }); } });
-app.post('/api/admin/logout',(req,res)=>{ if(req.session) req.session.destroy(()=>{}); res.json({ message:'Logged out'}); });
-app.get('/api/admin/me',(req,res)=>{ if(req.session&&req.session.adminEmail) return res.json({ email:req.session.adminEmail }); return res.status(401).json({ message:'Not authenticated'}); });
-app.post('/api/admin/test-email', auth, async (req,res)=>{ try { const ok=await sendMail('Test Monitoring Email', `<p>Test at ${new Date().toISOString()}</p>`); if(!ok) return res.status(500).json({ message:'Test email failed'}); res.json({ message:'Test email dispatched'});} catch(e){ res.status(500).json({ message:'Test email failed', error:e.message }); } });
+app.post('/api/admin/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password required' });
+  }
+  
+  try {
+    const { data: row } = await supabase.from('admin').select('*').eq('email', email).single();
+    if (!row) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    const ok = await bcrypt.compare(password, row.password_hash);
+    if (!ok) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    const token = generateToken(email);
+    res.json({ email, token });
+  } catch (e) {
+    res.status(500).json({ message: 'Login failed', error: e.message });
+  }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  // With JWT, logout is handled client-side by removing the token
+  res.json({ message: 'Logged out' });
+});
+
+app.get('/api/admin/me', auth, (req, res) => {
+  res.json({ email: req.adminEmail });
+});
+
+app.post('/api/admin/test-email', auth, async (req, res) => {
+  try {
+    const ok = await sendMail('Test Monitoring Email', `<p>Test at ${new Date().toISOString()}</p>`);
+    if (!ok) return res.status(500).json({ message: 'Test email failed' });
+    res.json({ message: 'Test email dispatched' });
+  } catch (e) {
+    res.status(500).json({ message: 'Test email failed', error: e.message });
+  }
+});
 
 // ---------------- URL submission & CSV import (modernized) ----------------
 const urlsAuth = ALLOW_PUBLIC_SUBMISSION ? (req,res,next)=>next() : auth;
@@ -1370,15 +1452,26 @@ app.get('/api/state', auth, (req,res)=>{
   res.json({ scanningPaused, cancelRequested, generation: currentScanGeneration, cron: SCAN_CRON });
 });
 
-// Server-Sent Events stream
-app.get('/api/stream', (req,res)=>{
-  res.setHeader('Content-Type','text/event-stream');
-  res.setHeader('Cache-Control','no-cache');
-  res.setHeader('Connection','keep-alive');
+// Server-Sent Events stream (with optional JWT auth)
+app.get('/api/stream', (req, res) => {
+  // Check for JWT token in query parameter for SSE authentication
+  const token = req.query.token;
+  if (token) {
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+    // Token is valid, allow SSE connection
+  }
+  // If no token provided, allow connection (for public mode)
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
   res.flushHeaders && res.flushHeaders();
   res.write('retry: 3000\n\n');
   sseClients.add(res);
-  req.on('close',()=>{ sseClients.delete(res); });
+  req.on('close', () => { sseClients.delete(res); });
 });
 
 // ---------------- Start Server ----------------

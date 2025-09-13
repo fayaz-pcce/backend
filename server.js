@@ -44,9 +44,6 @@ const NAV_TIMEOUT = 25000;
 // Faster overall timeouts for new logic
 const QUICK_HTTP_TIMEOUT = 6000; // ms for initial lightweight HTTP probe
 const PUPPETEER_NAV_TIMEOUT = 12000; // ms for full page load when needed
-// Store screenshots in legacy-compatible photos directory (fallback for local dev)
-const SCREENSHOT_DIR = path.join(__dirname,'public','photos');
-const SCREENSHOT_PUBLIC_PREFIX = '/photos';
 const BASE_PUBLIC_URL = process.env.BASE_PUBLIC_URL || `https://backend-q7e0.onrender.com`;
 // Allow public (unauthenticated) URL submission + listing if set to '1'
 const ALLOW_PUBLIC_SUBMISSION = process.env.ALLOW_PUBLIC_SUBMISSION === '1';
@@ -811,56 +808,13 @@ function logStatus(site){
   else if(site.status===STATUS.ANOMALY_SUSPECTED) console.log(`[ALERT] ${site.url} Anomaly suspected`);
 }
 
-// ---------------- Screenshot Cleanup Utility ----------------
+// ---------------- Screenshot Cleanup Utility (Cloudinary Only) ----------------
 async function cleanupOldScreenshots(){
   try {
-    const files = await fs.readdir(SCREENSHOT_DIR);
-    let cleanedCount = 0;
-    
-    // Clean up ALL legacy naming formats (site-{id}.png, site-{id}-{timestamp}.png)
-    for(const file of files) {
-      if(!file.endsWith('.png')) continue;
-      
-      // Match legacy formats: site-{id}.png OR site-{id}-{timestamp}.png
-      const legacyMatch = file.match(/^site-(\d+)(-\d{13})?\.png$/);
-      if(legacyMatch) {
-        const filePath = path.join(SCREENSHOT_DIR, file);
-        try {
-          await fs.unlink(filePath);
-          cleanedCount++;
-          console.log(`[CLEANUP] Removed legacy screenshot: ${file}`);
-        } catch(e) {
-          console.warn(`[CLEANUP] Failed to delete ${file}:`, e.message);
-        }
-      }
-    }
-    
-    // Clean up any very old files (30+ days) as failsafe
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    for(const file of files) {
-      if(!file.endsWith('.png')) continue;
-      
-      const filePath = path.join(SCREENSHOT_DIR, file);
-      try {
-        const stats = await fs.stat(filePath);
-        if(stats.mtime.getTime() < thirtyDaysAgo) {
-          // Only delete if it looks like an old format (has numbers/dashes)
-          if(/\d/.test(file) && file.includes('-')) {
-            await fs.unlink(filePath);
-            cleanedCount++;
-            console.log(`[CLEANUP] Removed very old file: ${file}`);
-          }
-        }
-      } catch {} // Ignore errors for individual files
-    }
-    
-    if(cleanedCount > 0) {
-      console.log(`[CLEANUP] Cleaned up ${cleanedCount} legacy screenshots`);
-    }
-    
-    return cleanedCount;
+    console.log('[CLEANUP] Screenshot cleanup now handled by Cloudinary - local files deprecated');
+    return 0; // No local files to clean
   } catch(e) {
-    console.error('[CLEANUP] Screenshot cleanup failed:', e.message);
+    console.error('[CLEANUP] Error:', e.message);
     return 0;
   }
 }
@@ -1107,9 +1061,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve new photos path + keep backwards compatibility for previously generated /screenshots files if any
-app.use('/photos', express.static(SCREENSHOT_DIR));
-app.use('/screenshots', express.static(SCREENSHOT_DIR));
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Auth routes (JWT-based)
@@ -1424,31 +1375,13 @@ app.post('/api/cleanup-screenshots', auth, async (req,res)=>{
   }
 });
 
-// ---- Migration Endpoint (Remove all legacy files immediately) ----
+// ---- Migration Endpoint (Cloudinary Only - No Local Files) ----
 app.post('/api/migrate-screenshots', auth, async (req,res)=>{
   try {
-    const files = await fs.readdir(SCREENSHOT_DIR);
-    let migratedCount = 0;
-    
-    for(const file of files) {
-      if(!file.endsWith('.png')) continue;
-      
-      // Remove ALL legacy formats: site-{id}.png and site-{id}-{timestamp}.png
-      if(file.match(/^site-\d+(-\d{13})?\.png$/)) {
-        const filePath = path.join(SCREENSHOT_DIR, file);
-        try {
-          await fs.unlink(filePath);
-          migratedCount++;
-          console.log(`[MIGRATE] Removed legacy file: ${file}`);
-        } catch(e) {
-          console.warn(`[MIGRATE] Failed to remove ${file}:`, e.message);
-        }
-      }
-    }
-    
+    console.log('[MIGRATE] Migration not needed - using Cloudinary exclusively');
     res.json({ 
       message: 'Migration completed - all legacy screenshots removed',
-      migratedFiles: migratedCount,
+      migratedFiles: 0,
       info: 'New URL-based naming (e.g., google.com.png) will be used going forward'
     });
   } catch(e) {

@@ -39,6 +39,16 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+// Check Cloudinary configuration at startup
+console.log('[CLOUDINARY] Configuration check:');
+console.log(`  Cloud Name: ${process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'NOT SET'}`);
+console.log(`  API Key: ${process.env.CLOUDINARY_API_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`  API Secret: ${process.env.CLOUDINARY_API_SECRET ? 'SET' : 'NOT SET'}`);
+
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error('[CLOUDINARY] ⚠️  WARNING: Cloudinary credentials not properly configured! Screenshots will fail.');
+}
+
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const NAV_TIMEOUT = 25000;
 // Faster overall timeouts for new logic
@@ -687,7 +697,12 @@ async function checkDbRow(row, opts={ clientView:false }){
   const full=await captureWithPuppeteer(`${scheme}://${row.url}`, row.id).catch(()=>null);
   if(full){
     httpStatus=full.httpStatus; navError=full.navError; overlayType=full.overlayType; overlaySnippet=full.overlaySnippet;
-   if(full.screenshotRel){ screenshot_url = full.screenshotRel; }
+   if(full.screenshotRel){ 
+     screenshot_url = full.screenshotRel; 
+     console.log(`[SCAN] Screenshot URL for ${row.url}: ${screenshot_url}`);
+   } else {
+     console.log(`[SCAN] No screenshot URL for ${row.url}`);
+   }
     if(navError){
       const msg=(navError.message||'').toLowerCase();
       const isTimeout=/timeout|timed out|navigation timeout/.test(msg);
@@ -725,6 +740,7 @@ async function checkDbRow(row, opts={ clientView:false }){
     try { if(loadCtx && loadCtx.page) await loadCtx.page.close(); } catch{}
   // Do NOT include error_details in DB payload (column not present). Only return it to client.
   const payload={ status:st, last_checked_at:new Date().toISOString(), screenshot_url: screenshot_url||null, ssl_expires_at: sslExp };
+  console.log(`[SCAN] Persisting ${row.url} with screenshot_url: ${screenshot_url}`);
   await safeUpdateUrl(row, payload);
   broadcastScanUpdate({ id: row.id, url: row.url, ...payload });
     if(st===STATUS.OK) console.log(`[SCAN] ${row.url} OK`);
@@ -1158,6 +1174,12 @@ app.get('/api/urls', urlsAuth, async (req,res)=>{
       if(r.error_details===undefined && r.error!==undefined) r.error_details=r.error;
       if(r.screenshot_url===undefined && r.screenshot) r.screenshot_url=r.screenshot;
       if(r.last_checked_at===undefined && r.lastCheckedAt) r.last_checked_at=r.lastCheckedAt;
+      // Debug log for screenshot URLs
+      if(r.screenshot_url) {
+        console.log(`[API] ${r.url} has screenshot_url: ${r.screenshot_url}`);
+      } else {
+        console.log(`[API] ${r.url} has NO screenshot_url`);
+      }
       return r;
     });
     res.json(normalized);
